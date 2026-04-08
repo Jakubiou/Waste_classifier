@@ -1,0 +1,38 @@
+{
+  "categories": [
+    "plastic",
+    "paper",
+    "glass",
+    "bio",
+    "mixed"
+  ],
+  "category_names": {
+    "plastic": "Plastic (yellow bin)",
+    "paper": "Paper (blue bin)",
+    "glass": "Glass (green bin)",
+    "bio": "Bio (brown bin)",
+    "mixed": "Mixed (black bin)"
+  },
+  "feature_names": [
+    "brightness",
+    "contrast",
+    "saturation",
+    "color_uniformity",
+    "warm_ratio",
+    "transparency",
+    "dark_ratio",
+    "edge_density",
+    "edge_intensity",
+    "texture_roughness",
+    "smoothness",
+    "entropy",
+    "edge_entropy",
+    "channel_variance",
+    "highlights"
+  ],
+  "img_size": 128,
+  "accuracy_cnn": 0.8268,
+  "n_train": 2139,
+  "n_test": 535,
+  "n_total": 2674
+}
