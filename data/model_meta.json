@@ -31,8 +31,6 @@
     "highlights"
   ],
   "img_size": 128,
-  "accuracy_cnn": 0.8268,
-  "n_train": 2139,
-  "n_test": 535,
-  "n_total": 2674
+  "accuracy_cnn": 0.8351,
+  "n_total": 2880
 }
