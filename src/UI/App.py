@@ -2,14 +2,20 @@ import os, json, io
 import numpy as np
 from PIL import Image, ImageFilter
 from flask import Flask, render_template_string, request, jsonify
-
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
 from tensorflow.keras.models import load_model
+import sys
 
-model = load_model(os.path.join(PROJECT_ROOT, "data", "model_cnn.keras"))
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+    MODEL_PATH = os.path.join(BASE_DIR, "model_cnn.keras")
+    META_PATH = os.path.join(BASE_DIR, "model_meta.json")
+else:
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    MODEL_PATH = os.path.join(BASE_DIR, "data", "model_cnn.keras")
+    META_PATH = os.path.join(BASE_DIR, "data", "model_meta.json")
 
-with open(os.path.join(PROJECT_ROOT, "data", "model_meta.json"), encoding="utf-8") as f:
+model = load_model(MODEL_PATH)
+with open(META_PATH, encoding="utf-8") as f:
     meta = json.load(f)
 
 CATEGORIES = meta["categories"]
@@ -17,7 +23,7 @@ CAT_NAMES  = meta["category_names"]
 IMG_SIZE   = meta["img_size"]
 
 CAT_COLORS = {"plastic":"#f5c542","paper":"#4287f5","glass":"#42c960","bio":"#8B4513","mixed":"#555"}
-
+CAT_EMOJIS = {"plastic":"🟡","paper":"🔵","glass":"🟢","bio":"🟤","mixed":"⚫"}
 FEAT_LABELS = {
     "brightness":"Brightness","contrast":"Contrast","saturation":"Saturation",
     "color_uniformity":"Color uniformity","warm_ratio":"Warm ratio",
@@ -33,39 +39,28 @@ def extract_features_for_display(img):
     img = img.resize((IMG_SIZE, IMG_SIZE))
     arr = np.asarray(img).astype("float32")
     r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
-    brightness = 0.299*r + 0.587*g + 0.114*b
-    max_rgb = np.maximum(np.maximum(r, g), b)
-    min_rgb = np.minimum(np.minimum(r, g), b)
-    sat = np.where(max_rgb > 0, (max_rgb - min_rgb)/(max_rgb+1e-8), 0)
+    bri = 0.299*r + 0.587*g + 0.114*b
+    mx = np.maximum(np.maximum(r, g), b)
+    mn = np.minimum(np.minimum(r, g), b)
+    sat = np.where(mx > 0, (mx - mn)/(mx+1e-8), 0)
     gray = img.convert("L")
-    edges = gray.filter(ImageFilter.FIND_EDGES)
-    ea = np.asarray(edges).astype("float32")
-    detail = gray.filter(ImageFilter.DETAIL)
-    da = np.asarray(detail).astype("float32")
-    emboss = gray.filter(ImageFilter.EMBOSS)
-    emba = np.asarray(emboss).astype("float32")
-    hist = np.histogram(brightness.flatten(), bins=64, range=(0,255))[0]
-    hist = hist/hist.sum(); hist = hist[hist>0]
-    ent = float(-np.sum(hist * np.log2(hist)))
-    ehist = np.histogram(ea.flatten(), bins=32, range=(0,255))[0]
-    ehist = ehist/ehist.sum(); ehist = ehist[ehist>0]
-    eent = float(-np.sum(ehist * np.log2(ehist)))
+    ea = np.asarray(gray.filter(ImageFilter.FIND_EDGES)).astype("float32")
+    da = np.asarray(gray.filter(ImageFilter.DETAIL)).astype("float32")
+    emba = np.asarray(gray.filter(ImageFilter.EMBOSS)).astype("float32")
+    h = np.histogram(bri.flatten(), bins=64, range=(0,255))[0]; h=h/h.sum(); h=h[h>0]
+    ent = float(-np.sum(h*np.log2(h)))
+    eh = np.histogram(ea.flatten(), bins=32, range=(0,255))[0]; eh=eh/eh.sum(); eh=eh[eh>0]
+    eent = float(-np.sum(eh*np.log2(eh)))
     return {
-        "brightness":round(float(brightness.mean()),2),
-        "contrast":round(float(brightness.std()),2),
-        "saturation":round(float(sat.mean()),4),
-        "color_uniformity":round(float(sat.std()),4),
-        "warm_ratio":round(float((r > b+15).mean()),4),
-        "transparency":round(float((brightness>210).mean()),4),
-        "dark_ratio":round(float((brightness<40).mean()),4),
-        "edge_density":round(float(ea.mean()),2),
-        "edge_intensity":round(float(ea.std()),2),
-        "texture_roughness":round(float(da.std()),2),
-        "smoothness":round(float(emba.std()),2),
-        "entropy":round(ent,4),
+        "brightness":round(float(bri.mean()),2),"contrast":round(float(bri.std()),2),
+        "saturation":round(float(sat.mean()),4),"color_uniformity":round(float(sat.std()),4),
+        "warm_ratio":round(float((r>b+15).mean()),4),"transparency":round(float((bri>210).mean()),4),
+        "dark_ratio":round(float((bri<40).mean()),4),"edge_density":round(float(ea.mean()),2),
+        "edge_intensity":round(float(ea.std()),2),"texture_roughness":round(float(da.std()),2),
+        "smoothness":round(float(emba.std()),2),"entropy":round(ent,4),
         "edge_entropy":round(eent,4),
         "channel_variance":round(float(np.var([r.mean(),g.mean(),b.mean()])),2),
-        "highlights":round(float((brightness>240).mean()),4),
+        "highlights":round(float((bri>240).mean()),4),
     }
 
 
@@ -78,11 +73,9 @@ HTML = r"""<!DOCTYPE html>
 <title>Waste Classifier</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f0f4f0;--card:#fff;--border:#d4ddd4;--text:#1a2e1a;--dim:#6b8068;
-  --accent:#2d7a3a;--al:#e8f5e9;--r:16px}
+:root{--bg:#f0f4f0;--card:#fff;--border:#d4ddd4;--text:#1a2e1a;--dim:#6b8068;--accent:#2d7a3a;--al:#e8f5e9;--r:16px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);
-  min-height:100vh;display:flex;justify-content:center;padding:24px 16px}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;justify-content:center;padding:24px 16px}
 .w{width:100%;max-width:540px}
 h1{font-size:1.6rem;font-weight:800;text-align:center;margin-bottom:2px;color:var(--accent)}
 .sub{color:var(--dim);font-size:.85rem;text-align:center;margin-bottom:20px}
@@ -113,11 +106,11 @@ h1{font-size:1.6rem;font-weight:800;text-align:center;margin-bottom:2px;color:va
 </head>
 <body>
 <div class="w">
-<h1> Waste Classifier</h1>
+<h1>♻️ Waste Classifier</h1>
 <p class="sub">Take a photo of waste → AI tells you which bin it goes to</p>
 <div class="card">
   <div class="dz"><input type="file" id="fi" accept="image/*" capture="environment" onchange="onP(this)">
-    <div class="di"></div><div class="dt"><strong>Tap to take photo</strong> or drag & drop</div></div>
+    <div class="di">📸</div><div class="dt"><strong>Tap to take photo</strong> or drag & drop</div></div>
   <div class="pv" id="pv"><img id="pi"></div>
   <button class="btn" id="btn" onclick="go()" disabled>Classify waste</button>
 </div>
@@ -125,13 +118,12 @@ h1{font-size:1.6rem;font-weight:800;text-align:center;margin-bottom:2px;color:va
 <div class="card" style="animation:su .4s ease">
   <div class="rh"><div class="re" id="re"></div><div class="rc" id="rc"></div>
     <div class="rb" id="rb"></div><div class="rcf" id="rcf"></div></div>
-  <div class="ft">Image properties (what the model sees)</div><div class="fg" id="fg"></div>
+  <div class="ft">Image properties</div><div class="fg" id="fg"></div>
   <div class="ft" style="margin-top:14px">Category probabilities</div><div id="pb"></div>
   <div class="tp" id="tp"></div>
   <a class="ag" onclick="rs()">← Try another</a>
 </div></div>
-<div class="inf">Conv2D CNN model, accuracy: <strong>{{ acnn }}%</strong>.
-Trained on <strong>{{ nd }}</strong> waste photos.</div>
+<div class="inf">CNN model accuracy: <strong>{{ acc }}%</strong>. Trained on <strong>{{ nd }}</strong> photos.</div>
 </div>
 <script>
 let sf=null;
@@ -168,26 +160,23 @@ function rs(){sf=null;document.getElementById('pv').style.display='none';documen
 @app.route("/")
 def index():
     return render_template_string(HTML, nd=meta["n_total"],
-        acnn=round(meta.get("accuracy_cnn",0)*100,1),
-        categories=CATEGORIES, cn=CAT_NAMES, cc=CAT_COLORS, fl=FEAT_LABELS)
+        acc=round(meta.get("accuracy_cnn", meta.get("accuracy",0))*100,1),
+        categories=CATEGORIES, cn=CAT_NAMES, cc=CAT_COLORS, ce=CAT_EMOJIS, fl=FEAT_LABELS)
 
 @app.route("/classify", methods=["POST"])
 def classify():
     if "photo" not in request.files:
         return jsonify({"error": "No photo"})
-    img_bytes = request.files["photo"].read()
     try:
-        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-
+        img = Image.open(io.BytesIO(request.files["photo"].read())).convert("RGB")
         feats = extract_features_for_display(img)
 
         img_r = img.resize((IMG_SIZE, IMG_SIZE))
-        matrix = np.asarray(img_r).astype("float32") / 255
-        proba = model.predict(np.expand_dims(matrix, 0), verbose=0)[0]
+        arr = np.asarray(img_r).astype("float32") / 255
+        proba = model.predict(np.expand_dims(arr, 0), verbose=0)[0]
 
         cat_idx = int(np.argmax(proba))
         cat = CATEGORIES[cat_idx]
-
         return jsonify({
             "category": cat,
             "confidence": round(float(proba[cat_idx])*100, 1),
@@ -198,6 +187,6 @@ def classify():
         return jsonify({"error": str(e)})
 
 if __name__ == "__main__":
-    print(f"️Waste Classifier | CNN accuracy: {meta.get('accuracy_cnn',0)*100:.1f}%")
-    print("http://localhost:5000")
+    acc = meta.get("accuracy_cnn", meta.get("accuracy", 0))
+    print(f"♻️ Waste Classifier | accuracy: {acc*100:.1f}% | http://localhost:5000")
     app.run(debug=False, port=5000)
