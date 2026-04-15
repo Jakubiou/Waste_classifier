@@ -2,38 +2,69 @@ import os, json, io
 import numpy as np
 from PIL import Image, ImageFilter
 from flask import Flask, render_template_string, request, jsonify
-from tensorflow.keras.models import load_model
 import sys
 
+try:
+    import ai_edge_litert.interpreter as tflite
+except ImportError:
+    try:
+        import tflite_runtime.interpreter as tflite
+    except ImportError:
+        import tensorflow as tf
+        tflite = tf.lite
+
 if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-    MODEL_PATH = os.path.join(BASE_DIR, "model_cnn.keras")
+    BASE_DIR = sys._MEIPASS
+    MODEL_PATH = os.path.join(BASE_DIR, "model_cnn.tflite")
     META_PATH = os.path.join(BASE_DIR, "model_meta.json")
 else:
     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    MODEL_PATH = os.path.join(BASE_DIR, "data", "model_cnn.keras")
+    MODEL_PATH = os.path.join(BASE_DIR, "data", "model_cnn.tflite")
     META_PATH = os.path.join(BASE_DIR, "data", "model_meta.json")
 
-model = load_model(MODEL_PATH)
 with open(META_PATH, encoding="utf-8") as f:
     meta = json.load(f)
+
+interpreter = tflite.Interpreter(model_path=MODEL_PATH)
+interpreter.allocate_tensors()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
 CATEGORIES = meta["categories"]
 CAT_NAMES  = meta["category_names"]
 IMG_SIZE   = meta["img_size"]
 
-CAT_COLORS = {"plastic":"#f5c542","paper":"#4287f5","glass":"#42c960","bio":"#8B4513","mixed":"#555"}
-CAT_EMOJIS = {"plastic":"🟡","paper":"🔵","glass":"🟢","bio":"🟤","mixed":"⚫"}
-FEAT_LABELS = {
-    "brightness":"Brightness","contrast":"Contrast","saturation":"Saturation",
-    "color_uniformity":"Color uniformity","warm_ratio":"Warm ratio",
-    "transparency":"Transparency","dark_ratio":"Dark ratio",
-    "edge_density":"Edge density","edge_intensity":"Edge intensity",
-    "texture_roughness":"Texture roughness","smoothness":"Smoothness",
-    "entropy":"Entropy","edge_entropy":"Edge entropy",
-    "channel_variance":"Channel variance","highlights":"Highlights",
+CAT_COLORS = {
+    "plastic": "#f5c542",
+    "paper":   "#4287f5",
+    "glass":   "#42c960",
+    "bio":     "#8B4513",
+    "mixed":   "#555"
 }
-
+CAT_EMOJIS = {
+    "plastic": "🟡",
+    "paper":   "🔵",
+    "glass":   "🟢",
+    "bio":     "🟤",
+    "mixed":   "⚫"
+}
+FEAT_LABELS = {
+    "brightness":       "Brightness",
+    "contrast":         "Contrast",
+    "saturation":       "Saturation",
+    "color_uniformity": "Color uniformity",
+    "warm_ratio":       "Warm ratio",
+    "transparency":     "Transparency",
+    "dark_ratio":       "Dark ratio",
+    "edge_density":     "Edge density",
+    "edge_intensity":   "Edge intensity",
+    "texture_roughness":"Texture roughness",
+    "smoothness":       "Smoothness",
+    "entropy":          "Entropy",
+    "edge_entropy":     "Edge entropy",
+    "channel_variance": "Channel variance",
+    "highlights":       "Highlights",
+}
 
 def extract_features_for_display(img):
     img = img.resize((IMG_SIZE, IMG_SIZE))
@@ -47,22 +78,31 @@ def extract_features_for_display(img):
     ea = np.asarray(gray.filter(ImageFilter.FIND_EDGES)).astype("float32")
     da = np.asarray(gray.filter(ImageFilter.DETAIL)).astype("float32")
     emba = np.asarray(gray.filter(ImageFilter.EMBOSS)).astype("float32")
-    h = np.histogram(bri.flatten(), bins=64, range=(0,255))[0]; h=h/h.sum(); h=h[h>0]
-    ent = float(-np.sum(h*np.log2(h)))
-    eh = np.histogram(ea.flatten(), bins=32, range=(0,255))[0]; eh=eh/eh.sum(); eh=eh[eh>0]
-    eent = float(-np.sum(eh*np.log2(eh)))
+    h = np.histogram(bri.flatten(), bins=64, range=(0,255))[0]
+    h = h / h.sum()
+    h = h[h > 0]
+    ent = float(-np.sum(h * np.log2(h)))
+    eh = np.histogram(ea.flatten(), bins=32, range=(0,255))[0]
+    eh = eh / eh.sum()
+    eh = eh[eh > 0]
+    eent = float(-np.sum(eh * np.log2(eh)))
     return {
-        "brightness":round(float(bri.mean()),2),"contrast":round(float(bri.std()),2),
-        "saturation":round(float(sat.mean()),4),"color_uniformity":round(float(sat.std()),4),
-        "warm_ratio":round(float((r>b+15).mean()),4),"transparency":round(float((bri>210).mean()),4),
-        "dark_ratio":round(float((bri<40).mean()),4),"edge_density":round(float(ea.mean()),2),
-        "edge_intensity":round(float(ea.std()),2),"texture_roughness":round(float(da.std()),2),
-        "smoothness":round(float(emba.std()),2),"entropy":round(ent,4),
-        "edge_entropy":round(eent,4),
-        "channel_variance":round(float(np.var([r.mean(),g.mean(),b.mean()])),2),
-        "highlights":round(float((bri>240).mean()),4),
+        "brightness":       round(float(bri.mean()), 2),
+        "contrast":         round(float(bri.std()), 2),
+        "saturation":       round(float(sat.mean()), 4),
+        "color_uniformity": round(float(sat.std()), 4),
+        "warm_ratio":       round(float((r > b + 15).mean()), 4),
+        "transparency":     round(float((bri > 210).mean()), 4),
+        "dark_ratio":       round(float((bri < 40).mean()), 4),
+        "edge_density":     round(float(ea.mean()), 2),
+        "edge_intensity":   round(float(ea.std()), 2),
+        "texture_roughness":round(float(da.std()), 2),
+        "smoothness":       round(float(emba.std()), 2),
+        "entropy":          round(ent, 4),
+        "edge_entropy":     round(eent, 4),
+        "channel_variance": round(float(np.var([r.mean(), g.mean(), b.mean()])), 2),
+        "highlights":       round(float((bri > 240).mean()), 4),
     }
-
 
 app = Flask(__name__)
 
@@ -106,11 +146,11 @@ h1{font-size:1.6rem;font-weight:800;text-align:center;margin-bottom:2px;color:va
 </head>
 <body>
 <div class="w">
-<h1>♻️ Waste Classifier</h1>
+<h1> Waste Classifier</h1>
 <p class="sub">Take a photo of waste → AI tells you which bin it goes to</p>
 <div class="card">
   <div class="dz"><input type="file" id="fi" accept="image/*" capture="environment" onchange="onP(this)">
-    <div class="di">📸</div><div class="dt"><strong>Tap to take photo</strong> or drag & drop</div></div>
+    <div class="di"></div><div class="dt"><strong>Tap to take photo</strong> or drag & drop</div></div>
   <div class="pv" id="pv"><img id="pi"></div>
   <button class="btn" id="btn" onclick="go()" disabled>Classify waste</button>
 </div>
@@ -159,9 +199,16 @@ function rs(){sf=null;document.getElementById('pv').style.display='none';documen
 
 @app.route("/")
 def index():
-    return render_template_string(HTML, nd=meta["n_total"],
-        acc=round(meta.get("accuracy_cnn", meta.get("accuracy",0))*100,1),
-        categories=CATEGORIES, cn=CAT_NAMES, cc=CAT_COLORS, ce=CAT_EMOJIS, fl=FEAT_LABELS)
+    return render_template_string(
+        HTML,
+        nd=meta["n_total"],
+        acc=round(meta.get("accuracy_cnn", meta.get("accuracy", 0)) * 100, 1),
+        categories=CATEGORIES,
+        cn=CAT_NAMES,
+        cc=CAT_COLORS,
+        ce=CAT_EMOJIS,
+        fl=FEAT_LABELS,
+    )
 
 @app.route("/classify", methods=["POST"])
 def classify():
@@ -172,14 +219,18 @@ def classify():
         feats = extract_features_for_display(img)
 
         img_r = img.resize((IMG_SIZE, IMG_SIZE))
-        arr = np.asarray(img_r).astype("float32") / 255
-        proba = model.predict(np.expand_dims(arr, 0), verbose=0)[0]
+        arr = np.asarray(img_r).astype("float32") / 255.0
+        arr = np.expand_dims(arr, axis=0)
+
+        interpreter.set_tensor(input_details[0]['index'], arr)
+        interpreter.invoke()
+        proba = interpreter.get_tensor(output_details[0]['index'])[0]
 
         cat_idx = int(np.argmax(proba))
         cat = CATEGORIES[cat_idx]
         return jsonify({
             "category": cat,
-            "confidence": round(float(proba[cat_idx])*100, 1),
+            "confidence": round(float(proba[cat_idx]) * 100, 1),
             "probabilities": [round(float(p), 4) for p in proba],
             "features": feats,
         })
@@ -188,5 +239,5 @@ def classify():
 
 if __name__ == "__main__":
     acc = meta.get("accuracy_cnn", meta.get("accuracy", 0))
-    print(f"♻️ Waste Classifier | accuracy: {acc*100:.1f}% | http://localhost:5000")
+    print(f"Waste Classifier (TFLite) | accuracy: {acc*100:.1f}% | http://localhost:5000")
     app.run(debug=False, port=5000)
