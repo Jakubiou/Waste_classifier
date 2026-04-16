@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from PIL import Image
-from src.core.feature_extractor import extract_features
+from lib.feature_extractor import extract_features
 
 '''
 Scans augmented image folders, extracts 15 visual features from each photo 

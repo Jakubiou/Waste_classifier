@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from flask import Flask, render_template_string, request, jsonify
 import sys
-from src.core.feature_extractor import extract_features
+from lib.feature_extractor import extract_features
 
 '''
 Flask web application for the waste classifier. Handles image uploads, 
