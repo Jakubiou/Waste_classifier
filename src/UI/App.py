@@ -1,13 +1,14 @@
 import os, json, io
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image
 from flask import Flask, render_template_string, request, jsonify
 import sys
+from src.core.feature_extractor import extract_features
 
 '''
-A Flask-based web application that provides a user-friendly interface 
-for the waste classifier. It handles image uploads, executes the TFLite inference 
-engine, and displays classification results with probability bars and image properties.
+Flask web application for the waste classifier. Handles image uploads, 
+runs TFLite inference, and displays classification results with 
+probability bars and extracted image properties.
 '''
 
 try:
@@ -72,52 +73,6 @@ FEAT_LABELS = {
     "highlights": "Highlights",
 }
 
-def extract_features_for_display(img):
-    '''
-    Calculates visual features for the 'Image Properties' section of the UI.
-    Identical logic to the training extraction but optimized for single image display.
-
-    :params img: Uploaded waste photo.
-    :return: Rounded numerical features for the web frontend.
-    '''
-
-    img = img.resize((IMG_SIZE, IMG_SIZE))
-    arr = np.asarray(img).astype("float32")
-    r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
-    bri = 0.299*r + 0.587*g + 0.114*b
-    mx = np.maximum(np.maximum(r, g), b)
-    mn = np.minimum(np.minimum(r, g), b)
-    sat = np.where(mx > 0, (mx - mn)/(mx+1e-8), 0)
-    gray = img.convert("L")
-    ea = np.asarray(gray.filter(ImageFilter.FIND_EDGES)).astype("float32")
-    da = np.asarray(gray.filter(ImageFilter.DETAIL)).astype("float32")
-    emba = np.asarray(gray.filter(ImageFilter.EMBOSS)).astype("float32")
-    h = np.histogram(bri.flatten(), bins=64, range=(0,255))[0]
-    h = h / h.sum()
-    h = h[h > 0]
-    ent = float(-np.sum(h * np.log2(h)))
-    eh = np.histogram(ea.flatten(), bins=32, range=(0,255))[0]
-    eh = eh / eh.sum()
-    eh = eh[eh > 0]
-    eent = float(-np.sum(eh * np.log2(eh)))
-    return {
-        "brightness": round(float(bri.mean()), 2),
-        "contrast": round(float(bri.std()), 2),
-        "saturation": round(float(sat.mean()), 4),
-        "color_uniformity": round(float(sat.std()), 4),
-        "warm_ratio": round(float((r > b + 15).mean()), 4),
-        "transparency": round(float((bri > 210).mean()), 4),
-        "dark_ratio": round(float((bri < 40).mean()), 4),
-        "edge_density": round(float(ea.mean()), 2),
-        "edge_intensity": round(float(ea.std()), 2),
-        "texture_roughness":round(float(da.std()), 2),
-        "smoothness": round(float(emba.std()), 2),
-        "entropy": round(ent, 4),
-        "edge_entropy": round(eent, 4),
-        "channel_variance": round(float(np.var([r.mean(), g.mean(), b.mean()])), 2),
-        "highlights": round(float((bri > 240).mean()), 4),
-    }
-
 app = Flask(__name__)
 
 HTML = r"""<!DOCTYPE html>
@@ -160,7 +115,7 @@ h1{font-size:1.6rem;font-weight:800;text-align:center;margin-bottom:2px;color:va
 </head>
 <body>
 <div class="w">
-<h1> Waste Classifier</h1>
+<h1>Waste Classifier</h1>
 <p class="sub">Take a photo of waste → AI tells you which bin it goes to</p>
 <div class="card">
   <div class="dz"><input type="file" id="fi" accept="image/*" capture="environment" onchange="onP(this)">
@@ -214,12 +169,10 @@ function rs(){sf=null;document.getElementById('pv').style.display='none';documen
 @app.route("/")
 def index():
     '''
-    Renders the main page of the application.
-    Injects metadata (accuracy, counts) and UI configuration into the HTML.
+    Renders the main page with metadata injected into the template.
 
     :return: Rendered HTML template.
     '''
-
     return render_template_string(
         HTML,
         nd=meta["n_total"],
@@ -234,17 +187,17 @@ def index():
 @app.route("/classify", methods=["POST"])
 def classify():
     '''
-    API endpoint that receives a photo, processes it, and returns the classification.
-    Performs normalization, tensor preparation, and inference.
+    Receives a photo, extracts display features, runs CNN inference,
+    and returns classification results as JSON.
 
-    :return: JSON object containing category, confidence, and all probabilities.
+    :return: JSON with category, confidence, probabilities, and features.
     '''
-
     if "photo" not in request.files:
         return jsonify({"error": "No photo"})
     try:
         img = Image.open(io.BytesIO(request.files["photo"].read())).convert("RGB")
-        feats = extract_features_for_display(img)
+
+        feats = extract_features(img, IMG_SIZE)
 
         img_r = img.resize((IMG_SIZE, IMG_SIZE))
         arr = np.asarray(img_r).astype("float32") / 255.0
@@ -267,5 +220,5 @@ def classify():
 
 if __name__ == "__main__":
     acc = meta.get("accuracy_cnn", meta.get("accuracy", 0))
-    print(f"Waste Classifier (TFLite) , accuracy: {acc*100:.1f}% , http://localhost:5000")
+    print(f"Waste Classifier (TFLite) | accuracy: {acc*100:.1f}% | http://localhost:5000")
     app.run(debug=False, port=5000)
