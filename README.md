@@ -1,5 +1,7 @@
 # Waste Classifier: Image Recognition for Waste Sorting
 
+### Made by: Jakub Šrámek
+
 A project focused on automatic waste classification using Convolutional Neural Networks (CNN). The system analyzes uploaded images, extracts visual features, and uses an optimized TensorFlow Lite model to determine the correct recycling category.
 
 ## Main Features
