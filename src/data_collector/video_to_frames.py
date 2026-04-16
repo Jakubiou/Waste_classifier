@@ -2,6 +2,13 @@ import os
 import cv2
 from PIL import Image
 
+'''
+This module provides tools for extracting static frames from video files. 
+It automatically categorizes images based on the source folder and resizes them 
+for use in the waste classification training dataset.
+'''
+
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 VIDEO_DIR = os.path.join(PROJECT_ROOT, "data", "videos")
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "data", "own")
@@ -13,14 +20,22 @@ IMG_SIZE = 512
 
 
 def extract_frames(video_path, output_dir):
+    '''
+    Extracts frames from a single video file at specified intervals and saves them as JPEGs.
+
+    :params video_path: Absolute or relative path to the input video file.
+    :params output_dir: Path to the directory where extracted frames will be saved.
+    :return: (int) The total count of frames successfully saved to the disk.
+    '''
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"    Nelze otevřít: {video_path}")
+        print(f" Cant open: {video_path}")
         return 0
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    print(f"    {total_frames} snímků, {fps:.0f} fps → ~{total_frames // FRAME_INTERVAL} fotek")
+    print(f" {total_frames} frames, {fps:.0f} fps -> {total_frames // FRAME_INTERVAL} pictures ")
 
     os.makedirs(output_dir, exist_ok=True)
     video_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -48,13 +63,20 @@ def extract_frames(video_path, output_dir):
 
 
 def main():
+    '''
+    Main execution logic. Scans category folders for video files, orchestrates
+    the frame extraction process, and maintains overall counters.
+
+    :params: None
+    :return: None
+    '''
 
     if not os.path.exists(VIDEO_DIR):
         os.makedirs(VIDEO_DIR)
         for cat in CATEGORIES:
             os.makedirs(os.path.join(VIDEO_DIR, cat), exist_ok=True)
-        print(f"\nSložka {VIDEO_DIR} vytvořena.")
-        print("Nahraj videa do data/videos/{{kategorie}}/")
+        print(f"\nFolder {VIDEO_DIR} created.")
+        print("Upload videos to data/videos/{{category}}/")
         print("Pak spusť znovu.")
         return
 
@@ -72,18 +94,18 @@ def main():
         if not videos:
             continue
 
-        print(f"\n[{cat.upper()}] – {len(videos)} videí")
+        print(f"\n[{cat.upper()}] – {len(videos)} videos")
         cat_total = 0
         for v in videos:
             print(f"  {v}")
             n = extract_frames(os.path.join(cat_video_dir, v), cat_output_dir)
-            print(f"    → {n} fotek uloženo")
+            print(f" -> {n} pictures saved")
             cat_total += n
 
-        print(f"  {cat}: {cat_total} fotek celkem")
+        print(f"  {cat}: {cat_total} pictures total")
         total += cat_total
 
-    print(f"\nHotovo!{total} fotek v {OUTPUT_DIR}")
+    print(f"\nDone {total} pictures in {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

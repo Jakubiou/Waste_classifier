@@ -4,6 +4,12 @@ from PIL import Image, ImageFilter
 from flask import Flask, render_template_string, request, jsonify
 import sys
 
+'''
+A Flask-based web application that provides a user-friendly interface 
+for the waste classifier. It handles image uploads, executes the TFLite inference 
+engine, and displays classification results with probability bars and image properties.
+'''
+
 try:
     import ai_edge_litert.interpreter as tflite
 except ImportError:
@@ -31,15 +37,15 @@ input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
 CATEGORIES = meta["categories"]
-CAT_NAMES  = meta["category_names"]
-IMG_SIZE   = meta["img_size"]
+CAT_NAMES = meta["category_names"]
+IMG_SIZE = meta["img_size"]
 
 CAT_COLORS = {
     "plastic": "#f5c542",
-    "paper":   "#4287f5",
-    "glass":   "#42c960",
-    "bio":     "#8B4513",
-    "mixed":   "#555"
+    "paper": "#4287f5",
+    "glass": "#42c960",
+    "bio": "#8B4513",
+    "mixed": "#555"
 }
 CAT_EMOJIS = {
     "plastic": "🟡",
@@ -49,24 +55,32 @@ CAT_EMOJIS = {
     "mixed":   "⚫"
 }
 FEAT_LABELS = {
-    "brightness":       "Brightness",
-    "contrast":         "Contrast",
-    "saturation":       "Saturation",
+    "brightness": "Brightness",
+    "contrast": "Contrast",
+    "saturation": "Saturation",
     "color_uniformity": "Color uniformity",
-    "warm_ratio":       "Warm ratio",
-    "transparency":     "Transparency",
-    "dark_ratio":       "Dark ratio",
-    "edge_density":     "Edge density",
-    "edge_intensity":   "Edge intensity",
+    "warm_ratio": "Warm ratio",
+    "transparency": "Transparency",
+    "dark_ratio": "Dark ratio",
+    "edge_density": "Edge density",
+    "edge_intensity": "Edge intensity",
     "texture_roughness":"Texture roughness",
-    "smoothness":       "Smoothness",
-    "entropy":          "Entropy",
-    "edge_entropy":     "Edge entropy",
+    "smoothness": "Smoothness",
+    "entropy": "Entropy",
+    "edge_entropy": "Edge entropy",
     "channel_variance": "Channel variance",
-    "highlights":       "Highlights",
+    "highlights": "Highlights",
 }
 
 def extract_features_for_display(img):
+    '''
+    Calculates visual features for the 'Image Properties' section of the UI.
+    Identical logic to the training extraction but optimized for single image display.
+
+    :params img: Uploaded waste photo.
+    :return: Rounded numerical features for the web frontend.
+    '''
+
     img = img.resize((IMG_SIZE, IMG_SIZE))
     arr = np.asarray(img).astype("float32")
     r, g, b = arr[:,:,0], arr[:,:,1], arr[:,:,2]
@@ -87,21 +101,21 @@ def extract_features_for_display(img):
     eh = eh[eh > 0]
     eent = float(-np.sum(eh * np.log2(eh)))
     return {
-        "brightness":       round(float(bri.mean()), 2),
-        "contrast":         round(float(bri.std()), 2),
-        "saturation":       round(float(sat.mean()), 4),
+        "brightness": round(float(bri.mean()), 2),
+        "contrast": round(float(bri.std()), 2),
+        "saturation": round(float(sat.mean()), 4),
         "color_uniformity": round(float(sat.std()), 4),
-        "warm_ratio":       round(float((r > b + 15).mean()), 4),
-        "transparency":     round(float((bri > 210).mean()), 4),
-        "dark_ratio":       round(float((bri < 40).mean()), 4),
-        "edge_density":     round(float(ea.mean()), 2),
-        "edge_intensity":   round(float(ea.std()), 2),
+        "warm_ratio": round(float((r > b + 15).mean()), 4),
+        "transparency": round(float((bri > 210).mean()), 4),
+        "dark_ratio": round(float((bri < 40).mean()), 4),
+        "edge_density": round(float(ea.mean()), 2),
+        "edge_intensity": round(float(ea.std()), 2),
         "texture_roughness":round(float(da.std()), 2),
-        "smoothness":       round(float(emba.std()), 2),
-        "entropy":          round(ent, 4),
-        "edge_entropy":     round(eent, 4),
+        "smoothness": round(float(emba.std()), 2),
+        "entropy": round(ent, 4),
+        "edge_entropy": round(eent, 4),
         "channel_variance": round(float(np.var([r.mean(), g.mean(), b.mean()])), 2),
-        "highlights":       round(float((bri > 240).mean()), 4),
+        "highlights": round(float((bri > 240).mean()), 4),
     }
 
 app = Flask(__name__)
@@ -199,6 +213,13 @@ function rs(){sf=null;document.getElementById('pv').style.display='none';documen
 
 @app.route("/")
 def index():
+    '''
+    Renders the main page of the application.
+    Injects metadata (accuracy, counts) and UI configuration into the HTML.
+
+    :return: Rendered HTML template.
+    '''
+
     return render_template_string(
         HTML,
         nd=meta["n_total"],
@@ -212,6 +233,13 @@ def index():
 
 @app.route("/classify", methods=["POST"])
 def classify():
+    '''
+    API endpoint that receives a photo, processes it, and returns the classification.
+    Performs normalization, tensor preparation, and inference.
+
+    :return: JSON object containing category, confidence, and all probabilities.
+    '''
+
     if "photo" not in request.files:
         return jsonify({"error": "No photo"})
     try:
@@ -239,5 +267,5 @@ def classify():
 
 if __name__ == "__main__":
     acc = meta.get("accuracy_cnn", meta.get("accuracy", 0))
-    print(f"Waste Classifier (TFLite) | accuracy: {acc*100:.1f}% | http://localhost:5000")
+    print(f"Waste Classifier (TFLite) , accuracy: {acc*100:.1f}% , http://localhost:5000")
     app.run(debug=False, port=5000)

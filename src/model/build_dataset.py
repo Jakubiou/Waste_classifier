@@ -3,15 +3,29 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageFilter
 
+'''
+This module handles the feature extraction process. It scans augmented 
+image folders, calculates a wide range of visual metrics (color, texture, entropy), 
+and compiles them into a structured CSV dataset for machine learning models.
+'''
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DATA_DIR     = os.path.join(PROJECT_ROOT, "data", "augmented")
-OUTPUT_CSV   = os.path.join(PROJECT_ROOT, "data", "dataset.csv")
+DATA_DIR     = os.path.join(PROJECT_ROOT, "data", "augmented1")
+OUTPUT_CSV   = os.path.join(PROJECT_ROOT, "data", "dataset2.csv")
 
 CATEGORIES = ["plastic", "paper", "glass", "bio", "mixed"]
 IMG_SIZE = 128
 
 
 def extract_features(img):
+    '''
+    Extracts a comprehensive set of numerical features from an image.
+    Calculates metrics for color distribution, lighting, edge complexity, and texture.
+
+    :params img: The input image object to be analyzed.
+    :return: A dictionary where keys are feature names (str) and values are calculated metrics (float/int).
+    '''
+
     img = img.resize((IMG_SIZE, IMG_SIZE))
     arr = np.asarray(img).astype("float32")
     r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
@@ -89,6 +103,14 @@ FEATURE_NAMES = list(extract_features(Image.new("RGB", (10, 10))).keys())
 
 
 def main():
+    '''
+    Main loop that walks through the data directory, processes every JPEG image,
+    and exports the final feature matrix to a CSV file. Includes basic statistics
+    of the generated dataset for verification.
+
+    :params: None
+    :return: None
+    '''
 
     rows = []
     for cat in CATEGORIES:

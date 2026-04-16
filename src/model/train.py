@@ -10,19 +10,25 @@ from tensorflow.keras.layers import Dense, Activation, Conv2D, MaxPooling2D, Fla
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
 
+'''
+This module handles the training of a Convolutional Neural Network (CNN) 
+for waste classification. It loads image data, balances classes, builds the model 
+architecture, and evaluates performance.
+'''
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_DIR  = os.path.join(PROJECT_ROOT, "data", "augmented")
-CSV_PATH  = os.path.join(PROJECT_ROOT, "data", "dataset1.csv")
+CSV_PATH  = os.path.join(PROJECT_ROOT, "data", "dataset.csv")
 CNN_PATH  = os.path.join(PROJECT_ROOT, "data", "model_cnn.keras")
 META_PATH = os.path.join(PROJECT_ROOT, "data", "model_meta.json")
 
 CATEGORIES = ["plastic", "paper", "glass", "bio", "mixed"]
 CATEGORY_NAMES = {
     "plastic": "Plastic (yellow bin)",
-    "paper":   "Paper (blue bin)",
-    "glass":   "Glass (green bin)",
-    "bio":     "Bio (brown bin)",
-    "mixed":   "Mixed (black bin)",
+    "paper": "Paper (blue bin)",
+    "glass": "Glass (green bin)",
+    "bio": "Bio (brown bin)",
+    "mixed": "Mixed (black bin)",
 }
 N_CLASSES = len(CATEGORIES)
 IMG_SIZE = 128
@@ -115,27 +121,26 @@ print(cnn.summary())
 cnn.fit(
     X_tr, y_tr_cat,
     batch_size=32,
-    epochs=30,
+    epochs=5,
     verbose=1,
     validation_data=(X_te, y_te_cat),
     class_weight=class_weight,
-    callbacks=[EarlyStopping(monitor="val_accuracy", patience=5,
-                              restore_best_weights=True)],
+    callbacks=[EarlyStopping(monitor="val_accuracy", patience=5,restore_best_weights=True)],
 )
 
 y_pred = cnn.predict(X_te).argmax(axis=1)
 y_true = y_te_cat.argmax(axis=1)
 
 acc = accuracy_score(y_true, y_pred)
-print(f"\n{'='*60}")
+
 print(f"  CNN Accuracy: {acc*100:.1f}%")
-print(f"{'='*60}")
+
 print(classification_report(y_true, y_pred, target_names=CATEGORIES, digits=3))
 print("Confusion matrix:")
 print(confusion_matrix(y_true, y_pred))
 
 print(f"\nPredicted: {dict(zip(CATEGORIES, np.bincount(y_pred, minlength=N_CLASSES)))}")
-print(f"Actual:    {dict(zip(CATEGORIES, np.bincount(y_true, minlength=N_CLASSES)))}")
+print(f"Actual: {dict(zip(CATEGORIES, np.bincount(y_true, minlength=N_CLASSES)))}")
 
 cnn.save(CNN_PATH)
 
@@ -149,5 +154,3 @@ meta = {
 }
 with open(META_PATH, "w", encoding="utf-8") as f:
     json.dump(meta, f, ensure_ascii=False, indent=2)
-
-print(f"\nModel saved: {CNN_PATH}")

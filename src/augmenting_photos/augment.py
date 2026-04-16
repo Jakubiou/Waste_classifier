@@ -3,10 +3,16 @@ import random
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
+'''
+This module performs data augmentation on the waste dataset. 
+It takes original images and generates multiple variations (rotations, color shifts, 
+noise, and background swaps) to increase dataset size and improve model generalization.
+'''
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-INPUT_DIR    = os.path.join(PROJECT_ROOT, "data", "own")
-OUTPUT_DIR   = os.path.join(PROJECT_ROOT, "data", "augmented")
-BG_DIR       = os.path.join(PROJECT_ROOT, "data", "backgrounds")
+INPUT_DIR = os.path.join(PROJECT_ROOT, "data", "own")
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "data", "augmented")
+BG_DIR = os.path.join(PROJECT_ROOT, "data", "backgrounds")
 
 CATEGORIES = ["plastic", "paper", "glass", "bio", "mixed"]
 IMG_SIZE = 128
@@ -15,6 +21,14 @@ USE_BACKGROUNDS = os.path.exists(BG_DIR) and len(os.listdir(BG_DIR)) > 0
 
 
 def center_crop(img, crop_pct=0.20):
+    '''
+    Crops the image from the center by a specified percentage.
+
+    :params img: The input image to be cropped.
+    :params crop_pct: Percentage of the image to remove from each side.
+    :return: The center-cropped and resized image.
+    '''
+
     w, h = img.size
     left = int(w * crop_pct)
     top = int(h * crop_pct)
@@ -24,6 +38,13 @@ def center_crop(img, crop_pct=0.20):
 
 
 def random_crop(img):
+    '''
+    Performs a random crop from the edges of the image to simulate different camera distances.
+
+    :params img: The input image.
+    :return: Randomly cropped image resized to original dimensions.
+    '''
+
     w, h = img.size
     p = random.uniform(0.10, 0.25)
     l, t = int(w * random.uniform(0, p)), int(h * random.uniform(0, p))
@@ -32,12 +53,26 @@ def random_crop(img):
 
 
 def add_noise(img):
+    '''
+    Adds random Gaussian noise to the image to simulate camera sensor grain.
+
+    :params img: The input image.
+    :return: Image with added digital noise.
+    '''
+
     arr = np.asarray(img).astype("float32")
     noise = np.random.normal(0, random.uniform(5, 12), arr.shape)
     return Image.fromarray(np.clip(arr + noise, 0, 255).astype("uint8"))
 
 
 def color_jitter(img):
+    '''
+    Randomly adjusts the RGB color channels and brightness to simulate various lighting conditions.
+
+    :params img: The input image.
+    :return: Color-shifted image.
+    '''
+
     arr = np.asarray(img).astype("float32")
     for c in range(3):
         arr[:, :, c] = np.clip(arr[:, :, c] * random.uniform(0.8, 1.2) + random.uniform(-20, 20), 0, 255)
@@ -45,6 +80,14 @@ def color_jitter(img):
 
 
 def random_background(img):
+    '''
+    Attempts to replace the image background with a random texture from the backgrounds folder
+    using a basic luminance mask.
+
+    :params img: The input image (usually with a light/white background).
+    :return: Image with a new composite background or original if backgrounds are missing.
+    '''
+
     if not USE_BACKGROUNDS:
         return img
     bg_name = random.choice(os.listdir(BG_DIR))
@@ -56,6 +99,14 @@ def random_background(img):
 
 
 def augment_image(img):
+    '''
+    The main augmentation pipeline. Generates a list of multiple image variations
+    including rotations, flips, brightness/contrast changes, and blurring.
+
+    :params img: The original input image.
+    :return: A list of PIL.Image objects containing all generated variations.
+    '''
+
     results = []
     cropped = center_crop(img)
     results.append(cropped)
@@ -88,6 +139,14 @@ def augment_image(img):
 
 
 def main():
+    '''
+    Orchestrates the augmentation process. Iterates through category folders,
+    loads original images, applies the augmentation pipeline, and saves results to disk.
+
+    :params: None
+    :return: None
+    '''
+
     total = 0
     for cat in CATEGORIES:
         in_dir = os.path.join(INPUT_DIR, cat)
